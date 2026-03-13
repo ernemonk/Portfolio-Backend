@@ -1,0 +1,44 @@
+# Enhanced Data Ingestion Service - Institutional Grade Dependencies
+# Based on hedge fund technology stacks
+
+# Core data libraries (as recommended for hedge funds)
+ccxt>=4.2.0  # Universal crypto exchange library
+yfinance>=0.2.18  # Yahoo Finance stock data
+yahooquery>=2.3.7  # Better bulk stock queries
+pandas-datareader>=0.10.0  # Multi-source financial data
+fredapi>=0.5.0  # Federal Reserve economic data
+
+# Streaming and real-time data
+websockets>=12.0  # WebSocket streaming
+redis>=5.0.0  # Real-time cache and streaming
+kafka-python>=2.0.2  # Apache Kafka for data streaming
+
+# Advanced analytics and backtesting
+vectorbt>=0.25.0  # Fast vectorized backtesting
+backtrader>=1.9.78  # Comprehensive backtesting framework
+ta-lib>=0.4.28  # Technical analysis indicators
+scipy>=1.11.0  # Statistical functions
+scikit-learn>=1.3.0  # Machine learning models
+
+# Time series databases
+influxdb-client>=1.38.0  # Time series database
+clickhouse-driver>=0.2.6  # Fast OLAP database
+
+# Enhanced data processing
+polars>=0.20.0  # Fast DataFrame library (used by Two Sigma)
+pyarrow>=14.0.0  # Columnar data processing
+numba>=0.59.0  # JIT compilation for speed
+
+# Risk and portfolio management
+zipline-reloaded>=3.0.3  # Algorithmic trading library
+quantlib>=1.32  # Quantitative finance library
+empyrical>=0.5.5  # Financial risk metrics
+
+# Feature engineering
+featuretools>=1.27.0  # Automated feature engineering
+tsfresh>=0.20.0  # Time series feature extraction
+
+# Alternative data sources
+newsapi-python>=0.2.7  # News sentiment data
+tweepy>=4.14.0  # Twitter sentiment data
+beautifulsoup4>=4.12.0  # Web scraping for alternative data

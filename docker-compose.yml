@@ -1,0 +1,458 @@
+version: "3.9"
+
+# ══════════════════════════════════════════════════════════════════════════
+# Trading OS - Unified Docker Compose Configuration
+# Supports all deployment scenarios with environment-based profiles
+# ══════════════════════════════════════════════════════════════════════════
+
+x-common-healthcheck: &postgres-healthcheck
+  test: ["CMD-SHELL", "pg_isready -U trading_os"]
+  interval: 5s
+  timeout: 5s
+  retries: 10
+
+x-common-environment: &common-env
+  DATABASE_URL: "${DATABASE_URL:-postgresql+asyncpg://trading_os:trading_os_dev@postgres:5432/trading_os}"
+  REDIS_URL: "redis://redis:6379"
+  ENV: "${ENV:-development}"
+
+services:
+  # ── Core Database Services ────────────────────────────────────────────
+  postgres:
+    image: postgres:17-alpine
+    container_name: trading_os_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-trading_os}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-trading_os_dev}"
+      POSTGRES_DB: "${POSTGRES_DB:-trading_os}"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - ./.data/postgres:/var/lib/postgresql/data
+    healthcheck: *postgres-healthcheck
+    networks:
+      - trading_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: trading_os_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - ./.data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - trading_network
+
+  # ── Institutional Database (Profile: institutional) ───────────────────
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: trading_os_clickhouse
+    restart: unless-stopped
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "${CLICKHOUSE_NATIVE_PORT:-9000}:9000"
+    volumes:
+      - ./.data/clickhouse:/var/lib/clickhouse
+    environment:
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    networks:
+      - trading_network
+    profiles:
+      - institutional
+      - analytics
+
+  # ── Core Services ──────────────────────────────────────────────────────
+  config:
+    build:
+      context: ./services/config
+      dockerfile: Dockerfile
+    container_name: trading_os_config
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      PORT: "3007"
+      PYTHONPATH: /packages
+    ports:
+      - "${CONFIG_PORT:-3007}:3007"
+    volumes:
+      - ./services/config:/app
+      - ./packages:/packages
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3007/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trading_network
+
+  orchestrator:
+    build:
+      context: ./services/orchestrator
+      dockerfile: Dockerfile
+    container_name: trading_os_orchestrator
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      PORT: "3001"
+      CONFIG_SERVICE_URL: "http://config:3007"
+      PYTHONPATH: /packages
+    ports:
+      - "${ORCHESTRATOR_PORT:-3001}:3001"
+    volumes:
+      - ./services/orchestrator:/app
+      - ./packages:/packages
+    depends_on:
+      - config
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trading_network
+
+  strategy:
+    build:
+      context: ./services/strategy
+      dockerfile: Dockerfile
+    container_name: trading_os_strategy
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      PORT: "3002"
+      CONFIG_SERVICE_URL: "http://config:3007"
+      PYTHONPATH: /packages
+    ports:
+      - "${STRATEGY_PORT:-3002}:3002"
+    volumes:
+      - ./services/strategy:/app
+      - ./packages:/packages
+    depends_on:
+      - config
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3002/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trading_network
+
+  risk:
+    build:
+      context: ./services/risk
+      dockerfile: Dockerfile
+    container_name: trading_os_risk
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      PORT: "3003"
+      CONFIG_SERVICE_URL: "http://config:3007"
+      PYTHONPATH: /packages
+    ports:
+      - "${RISK_PORT:-3003}:3003"
+    volumes:
+      - ./services/risk:/app
+      - ./packages:/packages
+    depends_on:
+      - config
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3003/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trading_network
+
+  execution:
+    build:
+      context: ./services/execution
+      dockerfile: Dockerfile
+    container_name: trading_os_execution
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      PORT: "3004"
+      CONFIG_SERVICE_URL: "http://config:3007"
+      PYTHONPATH: /packages
+    ports:
+      - "${EXECUTION_PORT:-3004}:3004"
+    volumes:
+      - ./services/execution:/app
+      - ./packages:/packages
+    depends_on:
+      - config
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3004/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trading_network
+
+  portfolio:
+    build:
+      context: ./services/portfolio
+      dockerfile: Dockerfile
+    container_name: trading_os_portfolio
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      PORT: "3005"
+      CONFIG_SERVICE_URL: "http://config:3007"
+      PYTHONPATH: /packages
+    ports:
+      - "${PORTFOLIO_PORT:-3005}:3005"
+    volumes:
+      - ./services/portfolio:/app
+      - ./packages:/packages
+    depends_on:
+      - config
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3005/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trading_network
+
+  analytics:
+    build:
+      context: ./services/analytics
+      dockerfile: Dockerfile
+    container_name: trading_os_analytics
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      PORT: "3006"
+      CONFIG_SERVICE_URL: "http://config:3007"
+      CLICKHOUSE_URL: "${CLICKHOUSE_URL:-http://clickhouse:8123}"
+      PYTHONPATH: /packages
+    ports:
+      - "${ANALYTICS_PORT:-3006}:3006"
+    volumes:
+      - ./services/analytics:/app
+      - ./packages:/packages
+    depends_on:
+      - config
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3006/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trading_network
+    profiles:
+      - analytics
+      - institutional
+
+  # ── AI Service with Flexible Configuration ────────────────────────────
+  local_ai:
+    build:
+      context: ./services/local_ai
+      dockerfile: Dockerfile
+    container_name: trading_os_local_ai
+    restart: unless-stopped
+    ports:
+      - "${AI_PORT:-3008}:3008"
+    environment:
+      - PYTHONUNBUFFERED=1
+      # AI Performance Tiers
+      - AI_PERFORMANCE_TIER=${AI_PERFORMANCE_TIER:-balanced}
+      - AI_MAX_MEMORY_GB=${AI_MAX_MEMORY_GB:-8}
+      - AI_PRELOAD_MODELS=${AI_PRELOAD_MODELS:-true}
+      - AI_AUTO_DOWNLOAD=${AI_AUTO_DOWNLOAD:-true}
+      - AI_ENABLE_GPU=${AI_ENABLE_GPU:-false}
+      # Cache optimization  
+      - HF_HOME=/root/.trading_os/model_cache
+      - TRANSFORMERS_CACHE=/root/.trading_os/model_cache
+      - TORCH_HOME=/root/.trading_os/model_cache
+    volumes:
+      - ./.data/ai_models:/root/.trading_os/ai_models
+      - ./.data/model_cache:/root/.trading_os/model_cache
+      - ./services/local_ai/models.yml:/app/models.yml:ro
+      - ./services/local_ai/src:/app/src:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3008/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      - redis
+    networks:
+      - trading_network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+        limits:
+          memory: "${AI_MEMORY_LIMIT:-8g}"
+    profiles:
+      - ai
+      - ai-fast
+      - ai-quality
+
+  # ── Data Ingestion Service ─────────────────────────────────────────────
+  data_ingestion:
+    build:
+      context: ./services/data_ingestion
+      dockerfile: Dockerfile
+    container_name: trading_os_data_ingestion
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      PORT: "3009"
+      VAULT_MASTER_KEY: "${VAULT_MASTER_KEY:-trading-os-dev-vault-key-change-me-in-production}"
+      PYTHONPATH: /packages
+    ports:
+      - "${DATA_INGESTION_PORT:-3009}:3009"
+    volumes:
+      - ./services/data_ingestion:/app
+      - ./packages:/packages
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3009/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trading_network
+
+  # ── Institutional Services (Profile: institutional) ────────────────────
+  feature_store:
+    build:
+      context: ./services/feature_store
+      dockerfile: Dockerfile
+    container_name: trading_os_feature_store
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      PORT: "3010"
+      CONFIG_SERVICE_URL: "http://config:3007"
+      CLICKHOUSE_URL: "http://clickhouse:8123"
+      PYTHONPATH: /packages
+    ports:
+      - "${FEATURE_STORE_PORT:-3010}:3010"
+    volumes:
+      - ./services/feature_store:/app
+      - ./packages:/packages
+    depends_on:
+      - config
+      - clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3010/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trading_network
+    profiles:
+      - institutional
+
+  stream_processor:
+    build:
+      context: ./services/stream_processor
+      dockerfile: Dockerfile
+    container_name: trading_os_stream_processor
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      PORT: "3011"
+      CONFIG_SERVICE_URL: "http://config:3007"
+      PYTHONPATH: /packages
+    ports:
+      - "${STREAM_PROCESSOR_PORT:-3011}:3011"
+    volumes:
+      - ./services/stream_processor:/app
+      - ./packages:/packages
+    depends_on:
+      - config
+      - redis
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3011/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trading_network
+    profiles:
+      - institutional
+
+  backtesting_engine:
+    build:
+      context: ./services/backtesting_engine
+      dockerfile: Dockerfile
+    container_name: trading_os_backtesting
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      PORT: "3012"
+      CONFIG_SERVICE_URL: "http://config:3007"
+      CLICKHOUSE_URL: "http://clickhouse:8123"
+      PYTHONPATH: /packages
+    ports:
+      - "${BACKTESTING_PORT:-3012}:3012"
+    volumes:
+      - ./services/backtesting_engine:/app
+      - ./packages:/packages
+    depends_on:
+      - config
+      - clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3012/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trading_network
+    profiles:
+      - institutional
+
+# ── Networks & Volumes ─────────────────────────────────────────────────────
+networks:
+  trading_network:
+    driver: bridge
+    name: "${NETWORK_NAME:-trading_os_network}"
+
+# No named volumes — using bind-mounts in .data/
+# This means 'docker compose down -v' does NOT wipe your data.
+# To reset: rm -rf .data/ && docker compose up -d
+
+# ── Deployment Profiles ────────────────────────────────────────────────────
+#
+# Basic:         docker compose up -d
+#                Core services + AI
+#
+# Institutional: docker compose --profile institutional up -d
+#                All services including ClickHouse, Feature Store, etc.
+#
+# AI Fast:       AI_PERFORMANCE_TIER=fast docker compose --profile ai-fast up -d
+#                Ultra-fast models for development
+#
+# AI Quality:    AI_PERFORMANCE_TIER=quality AI_MAX_MEMORY_GB=16 docker compose --profile ai-quality up -d
+#                High-quality models for research
+#
+# Analytics:     docker compose --profile analytics up -d
+#                Core + Analytics services
+#
+# Full Stack:    docker compose --profile institutional --profile ai-quality up -d
+#                Everything with premium AI models

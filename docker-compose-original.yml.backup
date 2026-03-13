@@ -1,0 +1,366 @@
+version: "3.9"
+
+services:
+  # ─────────────────────────────────────────────
+  # Data Layer
+  # ─────────────────────────────────────────────
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: trading_os_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: trading_os
+      POSTGRES_PASSWORD: trading_os_dev
+      POSTGRES_DB: trading_os
+    ports:
+      - "5432:5432"
+    volumes:
+      # Bind-mount → data lives at Backend/.data/postgres on your Mac.
+      # Survives 'docker compose down', 'docker compose down -v', reboots.
+      # Inspect directly: psql -h localhost -U trading_os trading_os
+      - ./.data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trading_os"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: trading_os_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      # Bind-mount → Redis AOF log lives at Backend/.data/redis
+      - ./.data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Adminer — PostgreSQL GUI at http://localhost:8080
+  adminer:
+    image: adminer:4
+    container_name: trading_os_adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # RedisInsight — Redis GUI at http://localhost:8001
+  redisinsight:
+    image: redis/redisinsight:latest
+    container_name: trading_os_redisinsight
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ─────────────────────────────────────────────
+  # Microservices (Python / FastAPI / uvicorn)
+  #
+  # PYTHONPATH=/packages makes trading_os.* importable in every service.
+  # Source code is volume-mounted so uvicorn --reload picks up changes instantly.
+  # EXECUTION_QUEUE_BACKEND: "memory"  ← single container (start here)
+  #                           "redis"  ← multi-container (flip when scaling)
+  # ─────────────────────────────────────────────
+
+  portfolio:
+    build:
+      context: ./services/portfolio
+      dockerfile: Dockerfile.dev
+    container_name: trading_os_portfolio
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: "3001"
+      DATABASE_URL: "postgresql+asyncpg://trading_os:trading_os_dev@postgres:5432/trading_os"
+      REDIS_URL: "redis://redis:6379"
+      PYTHONPATH: /packages
+      ENV: development
+    volumes:
+      - ./services/portfolio:/app
+      - ./packages:/packages
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  strategy:
+    build:
+      context: ./services/strategy
+      dockerfile: Dockerfile.dev
+    container_name: trading_os_strategy
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: "3002"
+      REDIS_URL: "redis://redis:6379"
+      PYTHONPATH: /packages
+      ENV: development
+    volumes:
+      - ./services/strategy:/app
+      - ./packages:/packages
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3002/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  risk:
+    build:
+      context: ./services/risk
+      dockerfile: Dockerfile.dev
+    container_name: trading_os_risk
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+    environment:
+      PORT: "3003"
+      DATABASE_URL: "postgresql+asyncpg://trading_os:trading_os_dev@postgres:5432/trading_os"
+      REDIS_URL: "redis://redis:6379"
+      PYTHONPATH: /packages
+      ENV: development
+    volumes:
+      - ./services/risk:/app
+      - ./packages:/packages
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3003/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  execution:
+    build:
+      context: ./services/execution
+      dockerfile: Dockerfile.dev
+    container_name: trading_os_execution
+    restart: unless-stopped
+    ports:
+      - "3004:3004"
+    environment:
+      PORT: "3004"
+      DATABASE_URL: "postgresql+asyncpg://trading_os:trading_os_dev@postgres:5432/trading_os"
+      REDIS_URL: "redis://redis:6379"
+      PYTHONPATH: /packages
+      ENV: development
+      PAPER_MODE: "true"
+      # ─── Queue backend ───────────────────────────────────────────────────────
+      # "memory"  → InMemoryExecutionQueue  (single process, local dev start)
+      # "redis"   → RedisExecutionQueue     (multi-container, flip when scaling)
+      EXECUTION_QUEUE_BACKEND: "memory"
+    volumes:
+      - ./services/execution:/app
+      - ./packages:/packages
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3004/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  orchestrator:
+    build:
+      context: ./services/orchestrator
+      dockerfile: Dockerfile.dev
+    container_name: trading_os_orchestrator
+    restart: unless-stopped
+    ports:
+      - "3005:3005"
+    environment:
+      PORT: "3005"
+      DATABASE_URL: "postgresql+asyncpg://trading_os:trading_os_dev@postgres:5432/trading_os"
+      REDIS_URL: "redis://redis:6379"
+      PYTHONPATH: /packages
+      ENV: development
+      # ─── LLM Agent ───────────────────────────────────────────────────────────
+      # "mock"      → heuristic stubs, zero cost, default for local dev
+      # "anthropic" → real Claude agents (requires ANTHROPIC_API_KEY in .env.local)
+      # "openai"    → GPT-4o agents (requires OPENAI_API_KEY in .env.local)
+      MODEL_PROVIDER: "mock"
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # Agent model pins (override in .env.local to use a specific version)
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-4-5}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+    volumes:
+      - ./services/orchestrator:/app
+      - ./packages:/packages
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3005/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  analytics:
+    build:
+      context: ./services/analytics
+      dockerfile: Dockerfile.dev
+    container_name: trading_os_analytics
+    restart: unless-stopped
+    ports:
+      - "3006:3006"
+    environment:
+      PORT: "3006"
+      DATABASE_URL: "postgresql+asyncpg://trading_os:trading_os_dev@postgres:5432/trading_os"
+      REDIS_URL: "redis://redis:6379"
+      PYTHONPATH: /packages
+      ENV: development
+    volumes:
+      - ./services/analytics:/app
+      - ./packages:/packages
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3006/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  config:
+    build:
+      context: ./services/config
+      dockerfile: Dockerfile.dev
+    container_name: trading_os_config
+    restart: unless-stopped
+    ports:
+      - "3007:3007"
+    environment:
+      PORT: "3007"
+      DATABASE_URL: "postgresql+asyncpg://trading_os:trading_os_dev@postgres:5432/trading_os"
+      REDIS_URL: "redis://redis:6379"
+      VAULT_MASTER_KEY: "${VAULT_MASTER_KEY:-trading-os-dev-vault-key-change-me-in-production}"
+      PYTHONPATH: /packages
+      ENV: development
+    volumes:
+      - ./services/config:/app
+      - ./packages:/packages
+      # Persist config files
+      - ./.data/config:/app/config
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3007/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────
+  # Data Ingestion Service
+  # ─────────────────────────────────────────────
+
+  data_ingestion:
+    build:
+      context: ./services/data_ingestion
+      dockerfile: Dockerfile.dev
+    container_name: trading_os_data_ingestion
+    restart: unless-stopped
+    ports:
+      - "3009:3009"
+    environment:
+      PORT: "3009"
+      DATABASE_URL: "postgresql+asyncpg://trading_os:trading_os_dev@postgres:5432/trading_os"
+      REDIS_URL: "redis://redis:6379"
+      VAULT_MASTER_KEY: "${VAULT_MASTER_KEY:-trading-os-dev-vault-key-change-me-in-production}"
+      PYTHONPATH: /packages
+      ENV: development
+    volumes:
+      - ./services/data_ingestion:/app
+      - ./packages:/packages
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3009/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────
+  # Local AI Service
+  # ─────────────────────────────────────────────
+  
+  local_ai:
+    build:
+      context: ./services/local_ai
+      dockerfile: Dockerfile
+    container_name: trading_os_local_ai
+    restart: unless-stopped
+    ports:
+      - "3008:3008"
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Install ALL models for maximum flexibility
+      - AI_PERFORMANCE_TIER=${AI_PERFORMANCE_TIER:-full}
+      - AI_AUTO_DOWNLOAD=${AI_AUTO_DOWNLOAD:-true}
+      - AI_PRELOAD_MODELS=${AI_PRELOAD_MODELS:-true}
+      - AI_MAX_MEMORY_GB=${AI_MAX_MEMORY_GB:-16}
+      - AI_ENABLE_MODEL_SWITCHING=${AI_ENABLE_MODEL_SWITCHING:-true}
+      # Cache optimization
+      - HF_HOME=/root/.trading_os/model_cache
+      - TRANSFORMERS_CACHE=/root/.trading_os/model_cache
+      - TORCH_HOME=/root/.trading_os/model_cache
+    volumes:
+      # Model storage (persistent)
+      - ./.data/ai_models:/root/.trading_os/ai_models
+      - ./.data/model_cache:/root/.trading_os/model_cache
+      # Configuration
+      - ./services/local_ai/models.yml:/app/models.yml:ro
+      # Source code for development
+      - ./services/local_ai/src:/app/src:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3008/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      - redis
+
+# No named volumes — both postgres and redis use bind-mounts in .data/
+# This means 'docker compose down -v' does NOT wipe your data.
+# To reset: rm -rf .data/postgres .data/redis .data/ai_models && docker compose up -d
+
+networks:
+  default:
+    name: trading_os_network

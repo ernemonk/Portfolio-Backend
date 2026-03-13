@@ -1,0 +1,187 @@
+model_config:
+  # Performance tiers for different use cases
+  performance_tiers:
+    fast:
+      description: "Ultra-fast models for real-time trading"
+      total_size_gb: 4.2
+      avg_response_time: "0.5-2s"
+      models:
+        - id: "orca-mini-3b-gguf2-q4_0"
+          name: "Orca Mini 3B"
+          type: "gpt4all"
+          size: "1.9GB"
+          priority: 1
+          use_cases: ["real-time decisions", "quick analysis", "chat"]
+        
+        - id: "microsoft/phi-2"
+          name: "Microsoft Phi-2"
+          type: "transformers"
+          size: "2.7GB" 
+          priority: 2
+          use_cases: ["code analysis", "reasoning", "trading logic"]
+        
+        - id: "sentence-transformers/all-MiniLM-L6-v2"
+          name: "MiniLM Embeddings"
+          type: "embeddings"
+          size: "80MB"
+          priority: 1
+          use_cases: ["document similarity", "search", "clustering"]
+
+    balanced:
+      description: "Best mix of speed and quality"
+      total_size_gb: 8.1
+      avg_response_time: "2-6s"
+      models:
+        - id: "mistral-7b-instruct-v0.1.Q4_0"
+          name: "Mistral 7B Instruct"
+          type: "gpt4all"
+          size: "4.1GB"
+          priority: 1
+          use_cases: ["financial analysis", "strategy planning", "reports"]
+        
+        - id: "microsoft/phi-2"
+          name: "Microsoft Phi-2"
+          type: "transformers"
+          size: "2.7GB"
+          priority: 2
+          use_cases: ["fast reasoning", "code generation"]
+        
+        - id: "ProsusAI/finbert"
+          name: "FinBERT"
+          type: "transformers"
+          size: "400MB"
+          priority: 1
+          use_cases: ["financial sentiment", "market analysis"]
+        
+        - id: "sentence-transformers/all-MiniLM-L6-v2"
+          name: "MiniLM Embeddings"
+          type: "embeddings"
+          size: "80MB"
+          priority: 1
+          use_cases: ["document analysis", "semantic search"]
+
+    full:
+      description: "Complete model suite - all models available"
+      total_size_gb: 45.8
+      avg_response_time: "varies by model"
+      models:
+        # Ultra-Fast Models
+        - id: "orca-mini-3b-gguf2-q4_0"
+          name: "Orca Mini 3B (Ultra-Fast)"
+          type: "gpt4all"
+          size: "1.9GB"
+          priority: 1
+          speed: "ultra-fast"
+          quality: "good"
+          use_cases: ["real-time trading", "quick responses", "instant analysis"]
+          best_for: "Real-time trading decisions, chat, quick queries"
+        
+        - id: "microsoft/phi-2"
+          name: "Microsoft Phi-2 (Fast Reasoning)"
+          type: "transformers"
+          size: "2.7GB"
+          priority: 1
+          speed: "fast"
+          quality: "excellent"
+          use_cases: ["code analysis", "reasoning", "trading logic"]
+          best_for: "Fast code generation, logical reasoning"
+        
+        # Balanced Models  
+        - id: "mistral-7b-instruct-v0.1.Q4_0"
+          name: "Mistral 7B (Balanced Power)"
+          type: "gpt4all"
+          size: "4.1GB"
+          priority: 1
+          speed: "balanced"
+          quality: "excellent"
+          use_cases: ["financial analysis", "strategy planning", "reports"]
+          best_for: "Main trading analysis, strategy development"
+        
+        - id: "codellama/CodeLlama-7b-Instruct-hf"
+          name: "Code Llama 7B (Code Specialist)"
+          type: "transformers"
+          size: "13GB"
+          priority: 2
+          speed: "balanced"
+          quality: "excellent"
+          use_cases: ["algorithm development", "backtesting", "API code"]
+          best_for: "Trading algorithm development, complex coding"
+        
+        # High-Quality Models
+        - id: "nous-hermes-llama2-13b.q4_0"
+          name: "Nous Hermes 13B (Premium Quality)"
+          type: "gpt4all"
+          size: "7.3GB"
+          priority: 2
+          speed: "slower"
+          quality: "premium"
+          use_cases: ["complex analysis", "research", "detailed reports"]
+          best_for: "Deep financial analysis, research reports"
+        
+        - id: "cognitivecomputations/dolphin-2.6-mixtral-8x7b"
+          name: "Dolphin Mixtral 8x7B (Expert Reasoning)"
+          type: "transformers"
+          size: "26GB"
+          priority: 3
+          speed: "slow"
+          quality: "premium"
+          use_cases: ["portfolio optimization", "risk modeling", "research"]
+          best_for: "Advanced portfolio optimization, complex modeling"
+        
+        # Specialized Models
+        - id: "ProsusAI/finbert"
+          name: "FinBERT (Financial Expert)"
+          type: "transformers"
+          size: "400MB"
+          priority: 1
+          speed: "fast"
+          quality: "excellent"
+          use_cases: ["sentiment analysis", "market analysis", "news processing"]
+          best_for: "Financial sentiment, market news analysis"
+        
+        - id: "sentence-transformers/all-MiniLM-L6-v2"
+          name: "MiniLM Embeddings (Search Expert)"
+          type: "embeddings"
+          size: "80MB"
+          priority: 1
+          speed: "ultra-fast"
+          quality: "excellent"
+          use_cases: ["document search", "similarity", "clustering"]
+          best_for: "Document search, semantic analysis"
+        
+        - id: "microsoft/DialoGPT-medium"
+          name: "DialoGPT (Conversation Expert)"
+          type: "transformers"
+          size: "350MB"
+          priority: 2
+          speed: "fast"
+          quality: "good"
+          use_cases: ["chat interface", "user interaction", "Q&A"]
+          best_for: "Trading dashboard chat, user interaction"
+
+# Environment configuration
+environment:
+  cache_dir: "/root/.trading_os/model_cache"
+  models_dir: "/root/.trading_os/ai_models"
+  
+  # Optimization settings
+  optimizations:
+    enable_quantization: true
+    use_memory_mapping: true
+    parallel_downloads: 3
+    cache_models: true
+    
+  # Resource limits
+  resource_limits:
+    max_memory_gb: 8
+    max_concurrent_models: 3
+    download_timeout_minutes: 30
+
+# Default settings
+defaults:
+  performance_tier: "full"  # Install all models for maximum flexibility
+  auto_download: true
+  preload_priority_models: true
+  enable_monitoring: true
+  enable_model_switching: true  # Allow dynamic model selection
+  model_selection_strategy: "auto"  # auto, manual, load_balanced

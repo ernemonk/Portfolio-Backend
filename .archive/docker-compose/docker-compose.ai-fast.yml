@@ -1,0 +1,13 @@
+# Trading OS AI - Quick Performance Tier Switching
+# 
+# Usage:
+#   Fast tier:     docker-compose -f docker-compose.yml -f docker-compose.ai-fast.yml up -d
+#   Balanced tier: docker-compose up -d  (default)
+#   Quality tier:  docker-compose -f docker-compose.yml -f docker-compose.ai-quality.yml up -d
+
+services:
+  local_ai:
+    environment:
+      - AI_PERFORMANCE_TIER=fast
+      - AI_MAX_MEMORY_GB=4
+    # Fast tier uses less memory, suitable for development

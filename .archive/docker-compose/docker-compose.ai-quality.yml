@@ -1,0 +1,11 @@
+# Trading OS AI - Quality Tier Override
+# 
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.ai-quality.yml up -d
+
+services:
+  local_ai:
+    environment:
+      - AI_PERFORMANCE_TIER=quality
+      - AI_MAX_MEMORY_GB=16
+      - AI_PRELOAD_MODELS=false  # Disable preload for quality tier (large models)
+    # Quality tier needs more resources

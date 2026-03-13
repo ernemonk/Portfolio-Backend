@@ -1,0 +1,20 @@
+# LangChain & AI Integration Requirements
+# Add these to your existing orchestrator requirements
+
+# Core LangChain
+langchain==0.1.14
+langchain-openai==0.1.1
+
+# LLM Providers
+openai==1.3.9
+
+# Optional: Additional LLM providers
+# anthropic==0.7.11  # For Claude
+# cohere==4.37  # For Cohere
+
+# Utilities
+pydantic==2.5.0
+python-dotenv==1.0.0
+
+# Observability (optional)
+langsmith==0.0.71  # LangChain observability

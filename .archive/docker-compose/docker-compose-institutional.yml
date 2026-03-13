@@ -1,0 +1,286 @@
+# Institutional Trading OS - Docker Compose Configuration  
+# Based on hedge fund technology stack architecture
+
+services:
+  # ── Core Database ──────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: trading_os
+      POSTGRES_USER: trading_user
+      POSTGRES_PASSWORD: secure_password_2024
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - trading_network
+
+  # ── Redis for Streaming & Caching ─────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - trading_network
+
+  # ── ClickHouse for Time Series (Institutional Grade) ─────────────────
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    restart: unless-stopped
+    ports:
+      - "8123:8123"  # HTTP
+      - "9000:9000"  # Native
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    environment:
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    networks:
+      - trading_network
+
+  # ── Original Services ──────────────────────────────────────────────────
+  config:
+    build: 
+      context: ./services/config
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://trading_user:secure_password_2024@postgres:5432/trading_os
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "3000:3000"
+    networks:
+      - trading_network
+
+  orchestrator:
+    build:
+      context: ./services/orchestrator
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://trading_user:secure_password_2024@postgres:5432/trading_os
+      - CONFIG_SERVICE_URL=http://config:3000
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - config
+      - redis
+    ports:
+      - "3001:3001"
+    networks:
+      - trading_network
+
+  strategy:
+    build:
+      context: ./services/strategy
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://trading_user:secure_password_2024@postgres:5432/trading_os
+      - CONFIG_SERVICE_URL=http://config:3000
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - config
+      - redis
+    ports:
+      - "3002:3002"
+    networks:
+      - trading_network
+
+  risk:
+    build:
+      context: ./services/risk
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://trading_user:secure_password_2024@postgres:5432/trading_os
+      - CONFIG_SERVICE_URL=http://config:3000
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - config
+      - redis
+    ports:
+      - "3003:3003"
+    networks:
+      - trading_network
+
+  execution:
+    build:
+      context: ./services/execution
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://trading_user:secure_password_2024@postgres:5432/trading_os
+      - CONFIG_SERVICE_URL=http://config:3000
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - config
+      - redis
+    ports:
+      - "3004:3004"
+    networks:
+      - trading_network
+
+  portfolio:
+    build:
+      context: ./services/portfolio
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://trading_user:secure_password_2024@postgres:5432/trading_os
+      - CONFIG_SERVICE_URL=http://config:3000
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - config
+      - redis
+    ports:
+      - "3005:3005"
+    networks:
+      - trading_network
+
+  analytics:
+    build:
+      context: ./services/analytics
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://trading_user:secure_password_2024@postgres:5432/trading_os
+      - CONFIG_SERVICE_URL=http://config:3000
+      - REDIS_URL=redis://redis:6379
+      - CLICKHOUSE_URL=http://clickhouse:8123
+    depends_on:
+      - postgres
+      - config
+      - redis
+      - clickhouse
+    ports:
+      - "3006:3006"
+    networks:
+      - trading_network
+
+  # ── Enhanced Data Ingestion (Institutional Grade) ───────────────────────
+  data_ingestion:
+    build:
+      context: ./services/data_ingestion
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://trading_user:secure_password_2024@postgres:5432/trading_os
+      - VAULT_MASTER_KEY=your-super-secret-32-char-key-12345678
+      - REDIS_URL=redis://redis:6379
+      - CLICKHOUSE_URL=http://clickhouse:8123
+      - INSTITUTIONAL_MODE=true
+    depends_on:
+      - postgres
+      - redis
+      - clickhouse
+    ports:
+      - "3009:3009"
+    networks:
+      - trading_network
+
+  # ── NEW: Feature Store (Institutional) ────────────────────────────────
+  feature_store:
+    build:
+      context: ./services/feature_store
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://trading_user:secure_password_2024@postgres:5432/trading_os
+      - REDIS_URL=redis://redis:6379
+      - CLICKHOUSE_URL=http://clickhouse:8123
+    depends_on:
+      - postgres
+      - redis
+      - clickhouse
+    ports:
+      - "3010:3010"
+    networks:
+      - trading_network
+
+  # ── NEW: Real-Time Stream Processor ───────────────────────────────────
+  stream_processor:
+    build:
+      context: ./services/stream_processor
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - CLICKHOUSE_URL=http://clickhouse:8123
+    depends_on:
+      - redis
+      - clickhouse
+    ports:
+      - "3011:3011"
+    networks:
+      - trading_network
+
+  # ── NEW: Backtesting Engine ────────────────────────────────────────────
+  backtesting:
+    build:
+      context: ./services/backtesting
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://trading_user:secure_password_2024@postgres:5432/trading_os
+      - REDIS_URL=redis://redis:6379
+      - CLICKHOUSE_URL=http://clickhouse:8123
+    depends_on:
+      - postgres
+      - redis
+      - clickhouse
+    ports:
+      - "3012:3012"
+    networks:
+      - trading_network
+
+  # ── AI Services ─────────────────────────────────────────────────────────
+  local_ai:
+    build:
+      context: ./services/local_ai
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - CONFIG_SERVICE_URL=http://config:3000
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - config
+      - redis
+    ports:
+      - "3007:3007"
+    networks:
+      - trading_network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+# ── Network & Volumes ────────────────────────────────────────────────────
+
+networks:
+  trading_network:
+    driver: bridge
+    name: institutional_trading_network
+
+volumes:
+  postgres_data:
+    name: institutional_postgres_data
+  redis_data:
+    name: institutional_redis_data
+  clickhouse_data:
+    name: institutional_clickhouse_data
