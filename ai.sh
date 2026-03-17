@@ -66,17 +66,16 @@ tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf|https://huggingface.co/TheBloke/TinyLlama-1
 "
 
 BALANCED_MODELS="
-zephyr-7b-beta.Q4_0.gguf|https://gpt4all.io/models/gguf/zephyr-7b-beta.Q4_0.gguf
-mistral-7b-openorca.gguf|https://gpt4all.io/models/gguf/mistral-7b-openorca.gguf
-neural-chat-7b-v3-1.Q4_0.gguf|https://gpt4all.io/models/gguf/neural-chat-7b-v3-1.Q4_0.gguf
+mistral-7b-instruct-v0.1.Q4_0.gguf|https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_0.gguf
+zephyr-7b-beta.Q4_K_M.gguf|https://huggingface.co/TheBloke/zephyr-7B-beta-GGUF/resolve/main/zephyr-7b-beta.Q4_K_M.gguf
+neural-chat-7b-v3-3.Q4_K_M.gguf|https://huggingface.co/TheBloke/neural-chat-7B-v3-3-GGUF/resolve/main/neural-chat-7b-v3-3.Q4_K_M.gguf
 "
 
 QUALITY_MODELS="
-openhermes-2-mistral-7B.Q4_0.gguf|https://gpt4all.io/models/gguf/openhermes-2-mistral-7B.Q4_0.gguf
-WizardLM-7B-uncensored.Q4_K_M.gguf|https://huggingface.co/TheBloke/WizardLM-7B-uncensored-GGUF/resolve/main/WizardLM-7B-uncensored.Q4_K_M.gguf
-Airoboros-7B-GPT4-1.4.1.Q4_K_M.gguf|https://huggingface.co/TheBloke/Airoboros-7B-GPT4-1.4.1-GGUF/resolve/main/Airoboros-7B-GPT4-1.4.1.Q4_K_M.gguf
+openhermes-2.5-mistral-7b.Q4_K_M.gguf|https://huggingface.co/TheBloke/OpenHermes-2.5-Mistral-7B-GGUF/resolve/main/openhermes-2.5-mistral-7b.Q4_K_M.gguf
 nous-hermes-2-mistral-7b-dpo.Q4_K_M.gguf|https://huggingface.co/TheBloke/Nous-Hermes-2-Mistral-7B-DPO-GGUF/resolve/main/nous-hermes-2-mistral-7b-dpo.Q4_K_M.gguf
 starling-lm-7b-alpha.Q4_K_M.gguf|https://huggingface.co/TheBloke/Starling-LM-7B-alpha-GGUF/resolve/main/starling-lm-7b-alpha.Q4_K_M.gguf
+wizardlm-7b-v1.0.Q4_K_M.gguf|https://huggingface.co/TheBloke/WizardLM-7B-V1.0-GGUF/resolve/main/wizardlm-7b-v1.0.Q4_K_M.gguf
 "
 
 ALL_MODELS="$FAST_MODELS$BALANCED_MODELS$QUALITY_MODELS"

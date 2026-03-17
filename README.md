@@ -2,14 +2,23 @@
 
 Complete backend microservices for the Trading OS platform with PostgreSQL, Redis, and AI integration.
 
-# Terminal 1: Backend
-cd Backend && docker-compose up -d
+## ⚡ Quick Start
 
-# Terminal 2: Frontend
-cd Portfolio && npm install && npm run dev
+### Terminal 1: Backend
+```bash
+cd Portfolio-Backend
+docker-compose up -d
+```
 
-# Browser
-open http://localhost:3000
+### Terminal 2: Frontend
+```bash
+cd Portfolio
+npm install
+npm run dev
+```
+
+### Browser
+Open http://localhost:3000
 
 ## 🚀 Quick Start
 
@@ -129,40 +138,74 @@ keys *
 exit
 ```
 
-## 🤖 AI Service
+## 🤖 AI Service & Model Management
 
-### Start AI Service with All Models
+The Trading OS includes a built-in AI service running local LLM models for trading analysis.
+
+### Quick AI Setup
 
 ```bash
-cd Backend
-./elegant-ai-setup.sh
+# Start all services
+docker-compose up -d
+
+# Download models (choose one tier)
+bash ai.sh download fast       # ~637MB (development)
+bash ai.sh download balanced   # ~3-4GB per model (recommended)
+bash ai.sh download quality    # ~3-4GB per model (research)
+
+# Check model availability
+bash ai.sh check
+
+# Start AI service
+bash ai.sh start balanced
 ```
 
-This will:
-- Start the local AI service
-- Auto-download all models
-- Enable smart model selection for trading tasks
+### AI Performance Tiers
+
+| Tier | Size | Speed | Best For |
+|------|------|-------|----------|
+| **Fast** | 637MB | Ultra-fast | Development/Testing |
+| **Balanced** | 3-4GB each | Fast | Production trading |
+| **Quality** | 3-4GB each | Good | Deep analysis |
+
+### Manual Model Management
+
+```bash
+# Download models
+bash ai.sh download balanced    # Recommended for production
+bash ai.sh download fast        # For testing
+bash ai.sh download quality     # For analysis
+bash ai.sh download all         # All models
+
+# Check status
+bash ai.sh check                # Model availability
+bash ai.sh status               # Service status
+bash ai.sh logs                 # View logs
+
+# Manage service
+bash ai.sh start balanced       # Start with tier
+bash ai.sh stop                 # Stop service
+bash ai.sh restart quality      # Restart with new tier
+```
 
 ### AI Endpoints
 
 ```bash
-# Get available models
-curl http://localhost:3008/dashboard/models
+# Check service health
+curl http://localhost:3008/health
 
-# Select model for task
-curl -X POST http://localhost:3008/dashboard/select-model \
-  -H "Content-Type: application/json" \
-  -d '{"task_type": "real_time_trading", "prefer_speed": true}'
+# List available models
+bash ai.sh models
 
-# Send smart chat message
-curl -X POST http://localhost:3008/v1/chat/completions/smart \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "auto-select",
-    "messages": [{"role": "user", "content": "Analyze AAPL"}],
-    "task_type": "financial_analysis",
-    "prefer_speed": false
-  }'
+# View model info
+bash ai.sh check
+```
+
+### Models Storage
+
+Downloaded models are saved locally to:
+```
+.data/ai_models/
 ```
 
 ## 📊 Combined Frontend + Backend
@@ -311,9 +354,10 @@ docker-compose restart local_ai
 
 ## 📚 Documentation
 
+- [ai.sh](ai.sh) - AI model management script
 - [Docker Compose Configuration](docker-compose.yml)
-- [AI Service Setup](elegant-ai-setup.sh)
 - [Service Details](services/)
+- [Tests](tests/)
 
 ## 🔐 Security Notes
 
@@ -321,7 +365,6 @@ docker-compose restart local_ai
 - Enable authentication in production
 - Secure API keys in `.env.local`
 - Use HTTPS in production
-
 ## 📄 License
 
 Part of Trading OS - All rights reserved

@@ -73,7 +73,7 @@ services:
   config:
     build:
       context: ./services/config
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: trading_os_config
     restart: unless-stopped
     environment:
@@ -101,7 +101,7 @@ services:
   orchestrator:
     build:
       context: ./services/orchestrator
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: trading_os_orchestrator
     restart: unless-stopped
     environment:
@@ -127,7 +127,7 @@ services:
   strategy:
     build:
       context: ./services/strategy
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: trading_os_strategy
     restart: unless-stopped
     environment:
@@ -153,7 +153,7 @@ services:
   risk:
     build:
       context: ./services/risk
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: trading_os_risk
     restart: unless-stopped
     environment:
@@ -179,7 +179,7 @@ services:
   execution:
     build:
       context: ./services/execution
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: trading_os_execution
     restart: unless-stopped
     environment:
@@ -205,7 +205,7 @@ services:
   portfolio:
     build:
       context: ./services/portfolio
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: trading_os_portfolio
     restart: unless-stopped
     environment:
@@ -231,7 +231,7 @@ services:
   analytics:
     build:
       context: ./services/analytics
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: trading_os_analytics
     restart: unless-stopped
     environment:
@@ -262,7 +262,7 @@ services:
   local_ai:
     build:
       context: ./services/local_ai
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: trading_os_local_ai
     restart: unless-stopped
     ports:
@@ -311,7 +311,7 @@ services:
   data_ingestion:
     build:
       context: ./services/data_ingestion
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: trading_os_data_ingestion
     restart: unless-stopped
     environment:
@@ -341,7 +341,7 @@ services:
   feature_store:
     build:
       context: ./services/feature_store
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: trading_os_feature_store
     restart: unless-stopped
     environment:
@@ -371,7 +371,7 @@ services:
   stream_processor:
     build:
       context: ./services/stream_processor
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: trading_os_stream_processor
     restart: unless-stopped
     environment:
@@ -400,7 +400,7 @@ services:
   backtesting_engine:
     build:
       context: ./services/backtesting_engine
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: trading_os_backtesting
     restart: unless-stopped
     environment:
