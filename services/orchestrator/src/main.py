@@ -29,10 +29,12 @@ import os
 import random
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 import httpx
 import redis.asyncio as aioredis
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -612,4 +614,139 @@ async def vote_simple(req: VoteSimpleRequest):
     if MODEL_PROVIDER == "anthropic":
         return await _anthropic_vote(intent, regime)
     return await _openai_vote(intent, regime)
+
+# ── API Gateway Routes ───────────────────────────────────────────────────────
+
+# Service URLs mapping based on frontend expectations
+SERVICE_URLS = {
+    "data_ingestion": "http://data_ingestion:3009",
+    "feature_store": "http://feature_store:3010", 
+    "config": "http://config:3007",
+    "portfolio": "http://portfolio:3005",
+    "strategy": "http://strategy:3002",
+    "risk": "http://risk:3003",
+    "execution": "http://execution:3004",
+    "analytics": "http://analytics:3006",
+}
+
+@app.get("/registry/services")
+async def get_service_registry():
+    """Return service registry for frontend discovery"""
+    return {
+        "services": {
+            "portfolio": "http://localhost:3001",
+            "strategy": "http://localhost:3001", 
+            "risk": "http://localhost:3001",
+            "execution": "http://localhost:3001",
+            "orchestrator": "http://localhost:3001",
+            "analytics": "http://localhost:3001",
+            "config": "http://localhost:3001",
+            "data_ingestion": "http://localhost:3001",
+            "feature_store": "http://localhost:3001",
+        }
+    }
+
+@app.api_route("/api/feature_store/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def mock_feature_store(path: str, request: Request):
+    """Mock feature_store endpoints since the service requires institutional profile"""
+    if path == "assets/data":
+        # Return mock asset data
+        return {
+            "assets": [
+                {
+                    "symbol": "BTC-USD",
+                    "source": "mock",
+                    "price": 65000.00,
+                    "volume_24h": 28500000000,
+                    "market_cap": 1280000000000,
+                    "indicators": {
+                        "rsi": 58.5,
+                        "macd": 450.2,
+                        "macd_signal": "BUY",
+                        "bollinger_upper": 67000,
+                        "bollinger_lower": 63000,
+                        "bollinger_position": 0.65,
+                        "volatility": 0.035,
+                        "trend_strength": 0.78,
+                        "volume_sma_ratio": 1.15
+                    },
+                    "data_quality": {
+                        "completeness": 0.97,
+                        "freshness": 0.95,
+                        "accuracy": 0.98
+                    },
+                    "last_updated": datetime.now(timezone.utc).isoformat()
+                },
+                {
+                    "symbol": "ETH-USD", 
+                    "source": "mock",
+                    "price": 3200.00,
+                    "volume_24h": 15200000000,
+                    "market_cap": 385000000000,
+                    "indicators": {
+                        "rsi": 62.1,
+                        "macd": 85.7,
+                        "macd_signal": "HOLD",
+                        "bollinger_upper": 3350,
+                        "bollinger_lower": 3050,
+                        "bollinger_position": 0.42,
+                        "volatility": 0.041,
+                        "trend_strength": 0.68,
+                        "volume_sma_ratio": 0.89
+                    },
+                    "data_quality": {
+                        "completeness": 0.96,
+                        "freshness": 0.97,
+                        "accuracy": 0.97
+                    },
+                    "last_updated": datetime.now(timezone.utc).isoformat()
+                }
+            ]
+        }
+    else:
+        raise HTTPException(status_code=501, detail=f"Feature store endpoint /{path} not implemented in mock service")
+
+@app.api_route("/api/{service_name}/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy_to_service(service_name: str, path: str, request: Request):
+    """Proxy API requests to the appropriate backend service"""
+    # Skip feature_store as it's handled by the mock endpoint above
+    if service_name == "feature_store":
+        raise HTTPException(status_code=404, detail="Use direct feature_store endpoints")
+        
+    if service_name not in SERVICE_URLS:
+        raise HTTPException(status_code=404, detail=f"Service {service_name} not found")
+    
+    service_url = SERVICE_URLS[service_name]
+    target_url = f"{service_url}/{path}"
+    
+    # Get request body if present
+    body = None
+    if request.method in ["POST", "PUT", "PATCH"]:
+        try:
+            body = await request.body()
+        except Exception:
+            body = None
+    
+    # Forward headers (excluding host)
+    headers = dict(request.headers)
+    headers.pop("host", None)
+    
+    try:
+        # Make request to target service
+        response = await _http.request(
+            method=request.method,
+            url=target_url,
+            params=request.query_params,
+            content=body,
+            headers=headers
+        )
+        
+        # Return response
+        return Response(
+            content=response.content,
+            status_code=response.status_code,
+            headers=dict(response.headers)
+        )
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Service {service_name} unavailable: {str(e)}")
 

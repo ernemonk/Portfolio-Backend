@@ -91,7 +91,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3007/health || exit 1"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:3007/health')\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -106,18 +106,18 @@ services:
     restart: unless-stopped
     environment:
       <<: *common-env
-      PORT: "3001"
+      PORT: "3005"
       CONFIG_SERVICE_URL: "http://config:3007"
       PYTHONPATH: /packages
     ports:
-      - "${ORCHESTRATOR_PORT:-3001}:3001"
+      - "${ORCHESTRATOR_PORT:-3001}:3005"
     volumes:
       - ./services/orchestrator:/app
       - ./packages:/packages
     depends_on:
       - config
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3001/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:3005/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -221,7 +221,7 @@ services:
     depends_on:
       - config
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3005/health || exit 1"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:3005/health')\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
