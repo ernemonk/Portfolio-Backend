@@ -26,6 +26,9 @@ Open http://localhost:3000
 
 ```bash
 # From Backend directory
+./start-services.sh
+
+# Or use docker-compose directly
 docker-compose up -d
 
 # Check service health
@@ -35,17 +38,18 @@ docker-compose ps
 docker-compose logs -f
 ```
 
-This starts all 7 services in parallel:
+This starts all 9 services in parallel:
 - **PostgreSQL** (port 5432)
 - **Redis** (port 6379)
-- **Portfolio Service** (port 3001)
+- **Portfolio Service** (port 3005)
 - **Strategy Service** (port 3002)
 - **Risk Service** (port 3003)
 - **Execution Service** (port 3004)
-- **Orchestrator Service** (port 3005)
+- **Orchestrator Service** (port 3001)
 - **Analytics Service** (port 3006)
 - **Config Service** (port 3007)
 - **Local AI Service** (port 3008)
+- **Data Ingestion** (port 3009)
 
 ### Start Specific Service
 
@@ -82,28 +86,30 @@ docker-compose logs -f               # All services (follow)
 docker-compose logs --tail=50 risk   # Last 50 lines
 
 # Check specific service health
-curl http://localhost:3001/health    # Portfolio
+curl http://localhost:3005/health    # Portfolio
 curl http://localhost:3002/health    # Strategy
 curl http://localhost:3003/health    # Risk
 curl http://localhost:3004/health    # Execution
-curl http://localhost:3005/health    # Orchestrator
+curl http://localhost:3001/health    # Orchestrator
 curl http://localhost:3006/health    # Analytics
 curl http://localhost:3007/health    # Config
-curl http://localhost:3008/health    # AI Service
+curl http://localhost:3008/health    # Local AI
+curl http://localhost:3009/health    # Data Ingestion
 ```
 
 ## 🔗 Service URLs
 
 | Service | Port | Health Check |
 |---------|------|--------------|
-| Portfolio | 3001 | http://localhost:3001/health |
+| Orchestrator | 3001 | http://localhost:3001/health |
 | Strategy | 3002 | http://localhost:3002/health |
 | Risk | 3003 | http://localhost:3003/health |
 | Execution | 3004 | http://localhost:3004/health |
-| Orchestrator | 3005 | http://localhost:3005/health |
+| Portfolio | 3005 | http://localhost:3005/health |
 | Analytics | 3006 | http://localhost:3006/health |
 | Config | 3007 | http://localhost:3007/health |
 | Local AI | 3008 | http://localhost:3008/health |
+| Data Ingestion | 3009 | http://localhost:3009/health |
 | PostgreSQL | 5432 | `psql -h localhost -U trading_os trading_os` |
 | Redis | 6379 | `redis-cli ping` |
 
@@ -270,7 +276,7 @@ pytest --cov=services tests/
 
 ```bash
 # Test all health endpoints
-for port in 3001 3002 3003 3004 3005 3006 3007 3008; do
+for port in 3001 3002 3003 3004 3005 3006 3007 3008 3009; do
   echo "Port $port:"
   curl -s http://localhost:$port/health | jq .
 done
@@ -284,14 +290,15 @@ Trading OS Backend
 ├── Redis (port 6379)
 │
 ├── Microservices
-│   ├── Portfolio (3001) - Portfolio management & analytics
+│   ├── Orchestrator (3001) - Agent orchestration (LLM)
 │   ├── Strategy (3002) - Trading strategy generation
 │   ├── Risk (3003) - Risk assessment & management
 │   ├── Execution (3004) - Order execution
-│   ├── Orchestrator (3005) - Agent orchestration (LLM)
+│   ├── Portfolio (3005) - Portfolio management & analytics
 │   ├── Analytics (3006) - Data analytics & reporting
 │   ├── Config (3007) - Service configuration
-│   └── Local AI (3008) - Local AI models
+│   ├── Local AI (3008) - Local AI models
+│   └── Data Ingestion (3009) - Market data ingestion
 │
 └── Data Layer
     ├── .data/postgres/ - PostgreSQL data

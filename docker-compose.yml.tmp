@@ -3,7 +3,6 @@ version: "3.9"
 # ══════════════════════════════════════════════════════════════════════════
 # Trading OS - Unified Docker Compose Configuration
 # Supports all deployment scenarios with environment-based profiles
-# Uses consolidated .env.local for all environment variables
 # ══════════════════════════════════════════════════════════════════════════
 
 x-common-healthcheck: &postgres-healthcheck
@@ -23,7 +22,6 @@ services:
     image: postgres:17-alpine
     container_name: trading_os_postgres
     restart: unless-stopped
-    env_file: .env.local
     environment:
       POSTGRES_USER: "${POSTGRES_USER:-trading_os}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-trading_os_dev}"
@@ -40,7 +38,6 @@ services:
     image: redis:7-alpine
     container_name: trading_os_redis
     restart: unless-stopped
-    env_file: .env.local
     command: redis-server --appendonly yes
     ports:
       - "${REDIS_PORT:-6379}:6379"
@@ -79,7 +76,6 @@ services:
       dockerfile: Dockerfile.dev
     container_name: trading_os_config
     restart: unless-stopped
-    env_file: .env.local
     environment:
       <<: *common-env
       PORT: "3007"
@@ -108,7 +104,6 @@ services:
       dockerfile: Dockerfile.dev
     container_name: trading_os_orchestrator
     restart: unless-stopped
-    env_file: .env.local
     environment:
       <<: *common-env
       PORT: "3005"
@@ -135,7 +130,6 @@ services:
       dockerfile: Dockerfile.dev
     container_name: trading_os_strategy
     restart: unless-stopped
-    env_file: .env.local
     environment:
       <<: *common-env
       PORT: "3002"
@@ -162,7 +156,6 @@ services:
       dockerfile: Dockerfile.dev
     container_name: trading_os_risk
     restart: unless-stopped
-    env_file: .env.local
     environment:
       <<: *common-env
       PORT: "3003"
@@ -189,7 +182,6 @@ services:
       dockerfile: Dockerfile.dev
     container_name: trading_os_execution
     restart: unless-stopped
-    env_file: .env.local
     environment:
       <<: *common-env
       PORT: "3004"
@@ -216,7 +208,6 @@ services:
       dockerfile: Dockerfile.dev
     container_name: trading_os_portfolio
     restart: unless-stopped
-    env_file: .env.local
     environment:
       <<: *common-env
       PORT: "3001"
@@ -243,7 +234,6 @@ services:
       dockerfile: Dockerfile.dev
     container_name: trading_os_analytics
     restart: unless-stopped
-    env_file: .env.local
     environment:
       <<: *common-env
       PORT: "3006"
@@ -272,7 +262,6 @@ services:
       dockerfile: Dockerfile.dev
     container_name: trading_os_local_ai
     restart: unless-stopped
-    env_file: .env.local
     ports:
       - "${AI_PORT:-3008}:3008"
     environment:
@@ -301,6 +290,15 @@ services:
       - redis
     networks:
       - trading_network
+    # Optional GPU support - service will use CPU if GPU unavailable
+    # If container fails to start and you don't have NVIDIA GPU, comment out the deploy section below
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
   # ── Data Ingestion Service ─────────────────────────────────────────────
   data_ingestion:
@@ -309,7 +307,6 @@ services:
       dockerfile: Dockerfile.dev
     container_name: trading_os_data_ingestion
     restart: unless-stopped
-    env_file: .env.local
     environment:
       <<: *common-env
       PORT: "3009"
@@ -340,7 +337,6 @@ services:
       dockerfile: Dockerfile.dev
     container_name: trading_os_feature_store
     restart: unless-stopped
-    env_file: .env.local
     environment:
       <<: *common-env
       PORT: "3010"
@@ -371,7 +367,6 @@ services:
       dockerfile: Dockerfile.dev
     container_name: trading_os_stream_processor
     restart: unless-stopped
-    env_file: .env.local
     environment:
       <<: *common-env
       PORT: "3011"
@@ -401,7 +396,6 @@ services:
       dockerfile: Dockerfile.dev
     container_name: trading_os_backtesting
     restart: unless-stopped
-    env_file: .env.local
     environment:
       <<: *common-env
       PORT: "3012"

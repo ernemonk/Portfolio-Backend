@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import select, update, delete
+from sqlalchemy import select, update, delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from trading_os.db.database import get_session, create_all_tables
@@ -172,7 +172,12 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3010",
+        "http://127.0.0.1:3010",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -587,6 +592,35 @@ async def delete_credential(
     return {"status": "deleted"}
 
 
+@app.get("/credentials/{credential_id}/decrypt")
+async def decrypt_credential(
+    credential_id: int, db: AsyncSession = Depends(get_session)
+):
+    """
+    Decrypt and return a credential value.
+    
+    WARNING: This endpoint returns plaintext secrets. Use with caution.
+    Only accessible from localhost/internal network.
+    """
+    result = await db.execute(
+        select(APICredential).where(APICredential.id == credential_id)
+    )
+    cred = result.scalar_one_or_none()
+    
+    if not cred:
+        raise HTTPException(status_code=404, detail="Credential not found")
+    
+    decrypted_value = vault.decrypt(cred.encrypted_value)
+    
+    return {
+        "id": cred.id,
+        "provider_name": cred.provider_name,
+        "credential_key": cred.credential_key,
+        "value": decrypted_value,
+        "credential_type": cred.credential_type,
+    }
+
+
 # ── Data Fetching ─────────────────────────────────────────────────────────
 
 @app.post("/fetch/prices")
@@ -848,6 +882,162 @@ async def get_latest_prices(
         }
         for p in prices
     ]
+
+
+# ── Database Browser ─────────────────────────────────────────────────────────
+
+@app.get("/database/tables")
+async def list_database_tables(db: AsyncSession = Depends(get_session)):
+    """List all tables in the database with row counts."""
+    # Get all table names from information_schema
+    query = text("""
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+        AND table_type = 'BASE TABLE'
+        ORDER BY table_name;
+    """)
+    
+    result = await db.execute(query)
+    table_names = [row[0] for row in result.fetchall()]
+    
+    # Get row counts for each table
+    tables_info = []
+    for table_name in table_names:
+        try:
+            count_query = text(f'SELECT COUNT(*) FROM "{table_name}"')
+            count_result = await db.execute(count_query)
+            row_count = count_result.scalar() or 0
+        except Exception:
+            row_count = 0
+        
+        tables_info.append({
+            "table_name": table_name,
+            "row_count": row_count,
+        })
+    
+    return tables_info
+
+
+@app.get("/database/tables/{table_name}/schema")
+async def get_table_schema(table_name: str, db: AsyncSession = Depends(get_session)):
+    """Get schema information for a specific table."""
+    query = text("""
+        SELECT 
+            column_name,
+            data_type,
+            is_nullable,
+            column_default
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+        AND table_name = :table_name
+        ORDER BY ordinal_position;
+    """)
+    
+    result = await db.execute(query, {"table_name": table_name})
+    columns = result.fetchall()
+    
+    return [
+        {
+            "column_name": row[0],
+            "data_type": row[1],
+            "is_nullable": row[2] == "YES",
+            "default_value": row[3],
+        }
+        for row in columns
+    ]
+
+
+@app.get("/database/tables/{table_name}/data")
+async def get_table_data(
+    table_name: str,
+    page: int = 1,
+    page_size: int = 25,
+    search: Optional[str] = None,
+    search_column: Optional[str] = None,
+    db: AsyncSession = Depends(get_session),
+):
+    """
+    Get paginated data from a specific table.
+    
+    Args:
+        table_name: Name of the table
+        page: Page number (1-indexed)
+        page_size: Number of rows per page
+        search: Optional search term
+        search_column: Optional column to search in
+    """
+    # Validate table name exists (prevent SQL injection)
+    table_check = await db.execute(
+        text("""
+        SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = :table_name
+        )
+        """),
+        {"table_name": table_name}
+    )
+    if not table_check.scalar():
+        raise HTTPException(status_code=404, detail=f"Table '{table_name}' not found")
+    
+    # Build query
+    offset = (page - 1) * page_size
+    
+    # Get total count
+    count_query = text(f'SELECT COUNT(*) FROM "{table_name}"')
+    count_result = await db.execute(count_query)
+    total_rows = count_result.scalar()
+    
+    # Get data with optional search
+    if search and search_column:
+        # Validate column exists
+        col_check = await db.execute(
+            text("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.columns
+                WHERE table_name = :table_name
+                AND column_name = :column_name
+            )
+            """),
+            {"table_name": table_name, "column_name": search_column}
+        )
+        if not col_check.scalar():
+            raise HTTPException(status_code=400, detail=f"Column '{search_column}' not found")
+        
+        data_query = text(f"""
+            SELECT * FROM "{table_name}"
+            WHERE CAST("{search_column}" AS TEXT) ILIKE :search
+            ORDER BY 1 DESC
+            LIMIT :limit OFFSET :offset
+        """)
+        result = await db.execute(
+            data_query,
+            {"search": f"%{search}%", "limit": page_size, "offset": offset}
+        )
+    else:
+        data_query = text(f'SELECT * FROM "{table_name}" ORDER BY 1 DESC LIMIT :limit OFFSET :offset')
+        result = await db.execute(data_query, {"limit": page_size, "offset": offset})
+    
+    rows = result.fetchall()
+    columns = result.keys()
+    
+    # Convert rows to dictionaries
+    data = [
+        {col: (val.isoformat() if hasattr(val, 'isoformat') else val) 
+         for col, val in zip(columns, row)}
+        for row in rows
+    ]
+    
+    return {
+        "table_name": table_name,
+        "total_rows": total_rows,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total_rows + page_size - 1) // page_size,
+        "columns": list(columns),
+        "data": data,
+    }
 
 
 # ── Pipeline Status Support ─────────────────────────────────────────────────
