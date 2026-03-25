@@ -587,7 +587,7 @@ async def verify_credential(
         return {"status": "error", "message": str(exc)}
 
 
-@app.get("/credentials/{credential_id}/decrypt")
+@app.post("/credentials/{credential_id}/decrypt")
 async def decrypt_credential(
     credential_id: int, db: AsyncSession = Depends(get_session)
 ):
