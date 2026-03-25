@@ -28,7 +28,7 @@ import redis.asyncio as aioredis
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import select, update, delete
+from sqlalchemy import select, update, delete, text, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from trading_os.db.database import get_session, create_all_tables
@@ -585,6 +585,195 @@ async def verify_credential(
         }
     except Exception as exc:
         return {"status": "error", "message": str(exc)}
+
+
+@app.get("/credentials/{credential_id}/decrypt")
+async def decrypt_credential(
+    credential_id: int, db: AsyncSession = Depends(get_session)
+):
+    """Decrypt and return the actual credential value (for frontend UI)."""
+    result = await db.execute(
+        select(APICredential).where(APICredential.id == credential_id)
+    )
+    cred = result.scalar_one_or_none()
+    if not cred:
+        raise HTTPException(status_code=404, detail="Credential not found")
+
+    try:
+        decrypted = vault.decrypt(cred.encrypted_value)
+        cred.last_used_at = datetime.now(timezone.utc)
+        await db.commit()
+        return {
+            "status": "ok",
+            "id": credential_id,
+            "provider_name": cred.provider_name,
+            "credential_key": cred.credential_key,
+            "decrypted_value": decrypted,
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to decrypt credential: {str(exc)}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Vault Status
+# ---------------------------------------------------------------------------
+
+@app.get("/vault/status")
+async def vault_status(db: AsyncSession = Depends(get_session)):
+    """Return vault overview: total credentials, active count, encryption algo."""
+    result = await db.execute(select(APICredential))
+    creds = result.scalars().all()
+    active = sum(1 for c in creds if c.is_active)
+    return {
+        "total_credentials": len(creds),
+        "active_credentials": active,
+        "encryption": "AES-256-Fernet",
+        "vault_key_set": bool(os.getenv("VAULT_MASTER_KEY")),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Database Browser (shared PostgreSQL introspection)
+# ---------------------------------------------------------------------------
+
+@app.get("/database/tables")
+async def list_database_tables(db: AsyncSession = Depends(get_session)):
+    """List all tables in the database with row counts."""
+    query = text("""
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_type = 'BASE TABLE'
+        ORDER BY table_name;
+    """)
+    result = await db.execute(query)
+    table_names = [row[0] for row in result.fetchall()]
+
+    tables_info = []
+    for table_name in table_names:
+        try:
+            count_result = await db.execute(
+                text(f'SELECT COUNT(*) FROM "{table_name}"')
+            )
+            row_count = count_result.scalar() or 0
+        except Exception:
+            row_count = 0
+        tables_info.append({"table_name": table_name, "row_count": row_count})
+
+    return tables_info
+
+
+@app.get("/database/tables/{table_name}/schema")
+async def get_table_schema(
+    table_name: str, db: AsyncSession = Depends(get_session)
+):
+    """Get column-level schema information for a table."""
+    query = text("""
+        SELECT column_name, data_type, is_nullable, column_default
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = :table_name
+        ORDER BY ordinal_position;
+    """)
+    result = await db.execute(query, {"table_name": table_name})
+    columns = result.fetchall()
+    return [
+        {
+            "column_name": row[0],
+            "data_type": row[1],
+            "is_nullable": row[2] == "YES",
+            "default_value": row[3],
+        }
+        for row in columns
+    ]
+
+
+@app.get("/database/tables/{table_name}/data")
+async def get_table_data(
+    table_name: str,
+    page: int = 1,
+    page_size: int = 25,
+    search: Optional[str] = None,
+    search_column: Optional[str] = None,
+    db: AsyncSession = Depends(get_session),
+):
+    """Paginated table data with optional column search."""
+    # Validate table exists (prevent SQL injection via table_name)
+    exists = await db.execute(
+        text("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_name = :table_name
+            )
+        """),
+        {"table_name": table_name},
+    )
+    if not exists.scalar():
+        raise HTTPException(status_code=404, detail=f"Table '{table_name}' not found")
+
+    offset = (page - 1) * page_size
+
+    # Total row count
+    total_rows = (
+        await db.execute(text(f'SELECT COUNT(*) FROM "{table_name}"'))
+    ).scalar()
+
+    # Fetch rows with optional search filter
+    if search and search_column:
+        col_check = await db.execute(
+            text("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.columns
+                    WHERE table_name = :table_name
+                      AND column_name = :column_name
+                )
+            """),
+            {"table_name": table_name, "column_name": search_column},
+        )
+        if not col_check.scalar():
+            raise HTTPException(
+                status_code=400, detail=f"Column '{search_column}' not found"
+            )
+        result = await db.execute(
+            text(f"""
+                SELECT * FROM "{table_name}"
+                WHERE CAST("{search_column}" AS TEXT) ILIKE :search
+                ORDER BY 1 DESC
+                LIMIT :limit OFFSET :offset
+            """),
+            {"search": f"%{search}%", "limit": page_size, "offset": offset},
+        )
+    else:
+        result = await db.execute(
+            text(
+                f'SELECT * FROM "{table_name}" ORDER BY 1 DESC LIMIT :limit OFFSET :offset'
+            ),
+            {"limit": page_size, "offset": offset},
+        )
+
+    rows = result.fetchall()
+    columns = result.keys()
+
+    data = [
+        {
+            col: (val.isoformat() if hasattr(val, "isoformat") else val)
+            for col, val in zip(columns, row)
+        }
+        for row in rows
+    ]
+
+    return {
+        "table_name": table_name,
+        "total_rows": total_rows,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total_rows + page_size - 1) // page_size,
+        "columns": list(columns),
+        "data": data,
+    }
 
 
 # ---------------------------------------------------------------------------
